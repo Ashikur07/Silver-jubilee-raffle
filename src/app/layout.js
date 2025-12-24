@@ -1,4 +1,5 @@
 import AuthProvider from "@/components/AuthProvider";
+import Navbar from "@/components/Navbar"; // ইম্পোর্ট করো
 import "./globals.css";
 
 export const metadata = {
@@ -11,7 +12,10 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         <AuthProvider>
-          {children}
+          <Navbar /> {/* এখানে বসালাম */}
+          <div className="pt-16"> {/* Navbar-এর হাইটের সমান প্যাডিং */}
+            {children}
+          </div>
         </AuthProvider>
       </body>
     </html>

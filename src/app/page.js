@@ -1,31 +1,21 @@
 "use client";
 import { useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Sparkles, Lock } from "lucide-react";
+import { useState } from "react"; // useEffect বাদ দিলাম
+import { Sparkles, Lock, LayoutDashboard } from "lucide-react";
 
 export default function Home() {
   const { data: session } = useSession();
   const router = useRouter();
   
-  // এডমিন ফর্মের জন্য স্টেট
   const [adminData, setAdminData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
 
-  // ১. যদি Google দিয়ে লগিন হয়ে যায়, সোজা ড্যাশবোর্ডে পাঠাও
-  useEffect(() => {
-    if (session) {
-      router.push("/dashboard");
-    }
-  }, [session, router]);
-
-  // ২. ম্যানুয়াল এডমিন লগিন হ্যান্ডলার
   const handleAdminLogin = (e) => {
     e.preventDefault();
     setError("");
 
     if (adminData.email === "admin@gmail.com" && adminData.password === "Admin1234") {
-      // এডমিন রোল সেট করে এডমিন পেজে পাঠানো
       localStorage.setItem("user", JSON.stringify({ role: "admin", email: adminData.email }));
       router.push("/admin");
     } else {
@@ -34,7 +24,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden p-4">
+    <main className="min-h-[calc(100vh-4rem)] bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden p-4">
       
       {/* Background Decor */}
       <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 animate-pulse"></div>
@@ -59,64 +49,82 @@ export default function Home() {
         {/* Main Card */}
         <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 rounded-2xl p-8 shadow-2xl">
           
-          {/* Option A: Google Login (For Users) */}
+          {/* User Section: Condition based on Session */}
           <div className="mb-8">
-            <button 
-              onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-              className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-gray-100 text-slate-900 rounded-xl font-bold text-lg transition-all transform hover:scale-[1.02]"
-            >
-              <img 
-                src="https://authjs.dev/img/providers/google.svg" 
-                alt="Google" 
-                className="w-6 h-6"
-              />
-              Sign in with Google
-            </button>
-            <p className="text-center text-gray-500 text-xs mt-3">
-              For Students, Teachers & Guests
-            </p>
+            {session ? (
+              // যদি লগিন করা থাকে
+              <button 
+                onClick={() => router.push("/dashboard")}
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-lg transition-all transform hover:scale-[1.02] shadow-lg shadow-blue-500/25"
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                Go to Dashboard
+              </button>
+            ) : (
+              // যদি লগিন না থাকে
+              <>
+                <button 
+                  onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                  className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-gray-100 text-slate-900 rounded-xl font-bold text-lg transition-all transform hover:scale-[1.02]"
+                >
+                  <img 
+                    src="https://authjs.dev/img/providers/google.svg" 
+                    alt="Google" 
+                    className="w-6 h-6"
+                  />
+                  Sign in with Google
+                </button>
+                <p className="text-center text-gray-500 text-xs mt-3">
+                  For Students, Teachers & Guests
+                </p>
+              </>
+            )}
           </div>
 
           {/* Divider */}
-          <div className="relative flex items-center justify-center mb-8">
-             <div className="absolute inset-0 flex items-center">
-               <div className="w-full border-t border-slate-700"></div>
-             </div>
-             <span className="relative bg-slate-900 px-4 text-xs text-gray-400 uppercase">OR Admin Access</span>
-          </div>
+          {!session && (
+            <>
+              <div className="relative flex items-center justify-center mb-8">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-700"></div>
+                </div>
+                <span className="relative bg-slate-900 px-4 text-xs text-gray-400 uppercase">OR Admin Access</span>
+              </div>
 
-          {/* Option B: Admin Login Form */}
-          <form onSubmit={handleAdminLogin} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400 ml-1">Admin Email</label>
-              <input 
-                type="email" 
-                placeholder="admin@gmail.com" 
-                className="w-full p-3 rounded-lg bg-slate-950 text-white border border-slate-700 focus:border-yellow-500 focus:outline-none"
-                value={adminData.email}
-                onChange={(e) => setAdminData({...adminData, email: e.target.value})}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-400 ml-1">Password</label>
-              <input 
-                type="password" 
-                placeholder="••••••" 
-                className="w-full p-3 rounded-lg bg-slate-950 text-white border border-slate-700 focus:border-yellow-500 focus:outline-none"
-                value={adminData.password}
-                onChange={(e) => setAdminData({...adminData, password: e.target.value})}
-              />
-            </div>
+              {/* Admin Login Form (Only show if not logged in user) */}
+              <form onSubmit={handleAdminLogin} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 ml-1">Admin Email</label>
+                  <input 
+                    type="email" 
+                    placeholder="admin@gmail.com" 
+                    className="w-full p-3 rounded-lg bg-slate-950 text-white border border-slate-700 focus:border-yellow-500 focus:outline-none"
+                    value={adminData.email}
+                    onChange={(e) => setAdminData({...adminData, email: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-400 ml-1">Password</label>
+                  <input 
+                    type="password" 
+                    placeholder="••••••" 
+                    className="w-full p-3 rounded-lg bg-slate-950 text-white border border-slate-700 focus:border-yellow-500 focus:outline-none"
+                    value={adminData.password}
+                    onChange={(e) => setAdminData({...adminData, password: e.target.value})}
+                  />
+                </div>
 
-            {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+                {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
-            <button 
-              type="submit"
-              className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg flex items-center justify-center gap-2 transition-colors"
-            >
-              <Lock size={16} /> Login as Admin
-            </button>
-          </form>
+                <button 
+                  type="submit"
+                  className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Lock size={16} /> Login as Admin
+                </button>
+              </form>
+            </>
+          )}
 
         </div>
       </div>
