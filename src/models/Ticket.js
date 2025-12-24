@@ -1,30 +1,19 @@
 import mongoose from "mongoose";
 
 const TicketSchema = new mongoose.Schema({
-  ticketNumber: { 
-    type: Number, 
-    required: true, 
-    unique: true, 
-    min: 1000, 
-    max: 10000 
+  ticketNumber: { type: Number, required: true, unique: true },
+  status: { 
+    type: String, 
+    enum: ["available", "sold"], 
+    default: "available" 
   },
   type: { 
     type: String, 
     enum: ["online", "offline"], 
     required: true 
   },
-  userMail: { 
-    type: String, 
-    default: null // অফলাইনের জন্য নাল থাকবে
-  },
-  status: { 
-    type: String, 
-    default: "sold" 
-  },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
-  }
-}, { collection: "ticket_sell" }); // কালেকশন নাম তোমার নোট অনুযায়ী
+  ownerEmail: { type: String, default: null }, // অনলাইনে কিনলে মেইল থাকবে
+  soldAt: { type: Date, default: null }
+});
 
 export default mongoose.models.Ticket || mongoose.model("Ticket", TicketSchema);
