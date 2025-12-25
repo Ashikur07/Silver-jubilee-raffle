@@ -19,8 +19,61 @@
   }
 }
 
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+
+/* globals.css এর শেষে যোগ করো */
+
+/* টিকেট ঘুরে সামনে আসার এনিমেশন (The Magic) */
+@keyframes spinInZoom {
+  0% {
+    transform: scale(0.1) rotateY(720deg) rotateX(45deg);
+    opacity: 0;
+    filter: blur(10px);
+  }
+  60% {
+    transform: scale(1.1) rotateY(0deg) rotateX(0deg);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    transform: scale(1) rotateY(0deg) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+/* গোল্ডেন শাইন ইফেক্ট */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ধীর গতির স্পিন */
+.animate-spin-slow {
+  animation: spin 20s linear infinite;
+}
+.animate-spin-slow-reverse {
+  animation: spin 20s linear infinite reverse;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* কনফেটি পড়ার এনিমেশন */
+@keyframes slideDown {
+    from { background-position: 0 0; }
+    to { background-position: 0 1000px; }
+}
+.animate-slide-down {
+    animation: slideDown 20s linear infinite;
 }

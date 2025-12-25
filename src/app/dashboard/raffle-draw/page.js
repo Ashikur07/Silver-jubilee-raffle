@@ -1,13 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Ticket, Users, ShoppingCart, CheckCircle, Zap, Grid } from "lucide-react";
+import { ArrowLeft, Ticket, Users, CheckCircle, Zap, Grid } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 // --- Components ---
 
-// 1. Premium Ticket Visual Component
+// 1. Premium Ticket Visual Component (ডিজাইন অপরিবর্তিত)
 const DemoTicket = ({ number, type = "large" }) => (
   <div className={`relative ${type === "large" ? "w-full max-w-2xl h-64" : "w-64 h-32"} mx-auto transition-all duration-500`}>
     <div className="absolute inset-0 bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 rounded-xl shadow-2xl transform rotate-1"></div>
@@ -41,15 +40,16 @@ const DemoTicket = ({ number, type = "large" }) => (
 
 export default function RaffleDrawPage() {
   const { data: session } = useSession();
-  const router = useRouter();
   
   // States
-  const [activeTab, setActiveTab] = useState("auto"); // 'auto' or 'manual'
-  const [stats, setStats] = useState({ total: 0, sold: 0, nextAvailable: 5001 });
+  const [activeTab, setActiveTab] = useState("auto");
+  // লজিক আপডেট: টোটাল ৫০০০ ফিক্সড, নেক্সট এভেইলেবল ক্যালকুলেট হবে সোল্ডের ওপর ভিত্তি করে
+  const [stats, setStats] = useState({ total: 5000, sold: 0, nextAvailable: 5001 });
   
   // Manual Selection States
   const [tickets, setTickets] = useState([]);
-  const [selected, setSelected] = useState([]);
+  // লজিক আপডেট: এখন আমরা _id এর বদলে ticketNumber স্টোর করব
+  const [selectedNumbers, setSelectedNumbers] = useState([]); 
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -57,80 +57,98 @@ export default function RaffleDrawPage() {
   const [quantity, setQuantity] = useState(1);
   const [previewRange, setPreviewRange] = useState("");
 
+  // ডাটা লোড করা
   useEffect(() => {
-    fetchStats();
-    if(activeTab === 'manual') fetchTickets(page);
-  }, [activeTab, page]);
+    fetchData();
+  }, [page, activeTab]); 
 
-  // Update preview numbers when quantity changes
+  // প্রিভিউ রেঞ্জ ক্যালকুলেশন
   useEffect(() => {
     if (stats.nextAvailable) {
-      const end = stats.nextAvailable + parseInt(quantity) - 1;
+      // ১০,০০০ এর বেশি যেন না যায়
+      const end = Math.min(10000, stats.nextAvailable + parseInt(quantity) - 1);
       setPreviewRange(`${stats.nextAvailable} - ${end}`);
     }
   }, [quantity, stats.nextAvailable]);
 
-  const fetchStats = async () => {
-    // In real app, create a stats API. Simulating here based on ticket query
-    const res = await fetch(`/api/tickets?type=online&page=1`);
-    const data = await res.json();
-    
-    // Find first available ticket for prediction
-    // (সিম্পল লজিকের জন্য আমরা ধরে নিচ্ছি sold টিকেটগুলো সিরিয়ালি আছে)
-    const total = data.total;
-    const sold = data.sold;
-    setStats({ 
-        total, 
-        sold, 
-        nextAvailable: 5001 + sold // Logic: Start (5001) + Sold Count
-    });
-  };
-
-  const fetchTickets = async (p) => {
+  const fetchData = async () => {
     setLoading(true);
-    const res = await fetch(`/api/tickets?type=online&page=${p}`);
-    const data = await res.json();
-    setTickets(data.tickets || []);
+    try {
+      // ১. গ্রিডের ডাটা আনা (API এখন মিক্সড ডাটা দিবে)
+      const res = await fetch(`/api/tickets?page=${page}`);
+      const data = await res.json();
+      setTickets(data.tickets || []);
+      
+      // ২. স্ট্যাটাস আপডেট করা
+      setStats(prev => ({
+          ...prev,
+          sold: data.sold,
+          // Next Available Logic: 5001 + Sold Count (সিকোয়েন্সিয়াল লজিক)
+          nextAvailable: 5001 + data.sold 
+      }));
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+    }
     setLoading(false);
   };
 
-  const toggleSelect = (ticket) => {
-    if (ticket.status === "sold") return;
-    if (selected.includes(ticket._id)) {
-      setSelected(selected.filter(id => id !== ticket._id));
+  // লজিক আপডেট: সিলেকশন এখন নাম্বারের ভিত্তিতে হবে
+  const toggleSelect = (ticketNumber, status) => {
+    if (status === "sold") return;
+    
+    if (selectedNumbers.includes(ticketNumber)) {
+      setSelectedNumbers(selectedNumbers.filter(n => n !== ticketNumber));
     } else {
-      setSelected([...selected, ticket._id]);
+      setSelectedNumbers([...selectedNumbers, ticketNumber]);
     }
   };
 
   const handleBuy = async (mode) => {
-    let ticketIdsToBuy = [];
+    let numbersToBuy = [];
 
     if (mode === 'auto') {
-      if(!confirm(`Buy ${quantity} tickets starting from #${stats.nextAvailable}?`)) return;
-      // Auto buy logic needs backend support to pick next available, 
-      // but here we simulate simply by telling user it's done for demo.
-      // In real implementation, you'd send { quantity: 5 } to API.
-      alert(`🎉 Successfully purchased ${quantity} tickets!`);
-      fetchStats();
-      return;
+      // Auto Logic: nextAvailable থেকে শুরু করে quantity পর্যন্ত নাম্বার জেনারেট করা
+      const start = stats.nextAvailable;
+      for(let i=0; i<quantity; i++) {
+          if(start + i <= 10000) numbersToBuy.push(start + i);
+      }
+      
+      if(numbersToBuy.length === 0) return alert("No tickets available in this range!");
+
+      if(!confirm(`Buy ${numbersToBuy.length} tickets (${numbersToBuy[0]} - ${numbersToBuy[numbersToBuy.length-1]})?`)) return;
     } 
     
     if (mode === 'manual') {
-      if(selected.length === 0) return alert("Please select at least one ticket.");
-      if(!confirm(`Confirm purchase of ${selected.length} tickets?`)) return;
+      if(selectedNumbers.length === 0) return alert("Please select at least one ticket.");
+      numbersToBuy = selectedNumbers;
       
-      await fetch("/api/tickets", {
+      if(!confirm(`Confirm purchase of ${selectedNumbers.length} tickets?`)) return;
+    }
+
+    // API Call (Logic Updated to send ticketNumbers)
+    try {
+      const res = await fetch("/api/tickets", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          ticketIds: selected, 
+          ticketNumbers: numbersToBuy, 
           email: session?.user?.email || "guest@user.com"
         }),
       });
-      alert("Purchase Successful!");
-      setSelected([]);
-      fetchTickets(page);
-      fetchStats();
+
+      const result = await res.json();
+
+      if (result.success) {
+        alert("🎉 Purchase Successful!");
+        setSelectedNumbers([]); // সিলেকশন ক্লিয়ার
+        fetchData(); // ডাটা রিফ্রেশ
+        // অটো মোডে থাকলে কোয়ান্টিটি রিসেট করতে পারো চাইলে
+        if(mode === 'auto') setQuantity(1);
+      } else {
+        alert("Failed: " + result.message);
+      }
+    } catch (error) {
+      alert("Something went wrong!");
     }
   };
 
@@ -154,7 +172,8 @@ export default function RaffleDrawPage() {
         <div className="text-center space-y-6 animate-in slide-in-from-top-10 duration-700">
            <h2 className="text-3xl md:text-5xl font-bold text-white">Grab Your Lucky Chance!</h2>
            <p className="text-blue-200">Exclusive tickets for the 25th Silver Jubilee Celebration.</p>
-           <DemoTicket number="DEMO" type="large" />
+           {/* ডেমো টিকেটে এখন প্রিভিউ বা ডিফল্ট কিছু দেখাবে */}
+           <DemoTicket number={activeTab === 'auto' ? (previewRange || "WIN") : "SELECT"} type="large" />
         </div>
 
         {/* 3. Stats Cards */}
@@ -223,13 +242,13 @@ export default function RaffleDrawPage() {
                         </div>
                       </div>
                       <div className="bg-blue-900/20 p-4 rounded-xl border border-blue-500/20 text-sm text-blue-200">
-                         💡 System will automatically assign the next available numbers for you. Fast & Easy!
+                          💡 System will automatically assign the next available numbers for you. Fast & Easy!
                       </div>
                       <button 
-                         onClick={() => handleBuy('auto')}
-                         className="w-full py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-slate-900 font-bold rounded-xl shadow-lg transform hover:scale-[1.02] transition-all"
+                          onClick={() => handleBuy('auto')}
+                          className="w-full py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-slate-900 font-bold rounded-xl shadow-lg transform hover:scale-[1.02] transition-all"
                       >
-                         Buy Now
+                          Buy Now
                       </button>
                    </div>
 
@@ -251,29 +270,29 @@ export default function RaffleDrawPage() {
                    <div className="flex justify-between items-center mb-6">
                       <h3 className="text-lg font-bold text-white">Select Your Numbers</h3>
                       
-                      {/* Pagination for 50 tickets per page as requested */}
+                      {/* Pagination: 50 Tickets Per Page */}
                       <div className="flex items-center gap-2">
                          <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page===1} className="px-3 py-1 bg-slate-800 rounded disabled:opacity-50 text-xs">Prev</button>
-                         <span className="text-xs text-gray-400">Page {page} ({(page-1)*100 + 5001} - {page*100 + 5000})</span>
-                         <button onClick={() => setPage(page + 1)} className="px-3 py-1 bg-slate-800 rounded text-xs">Next</button>
+                         <span className="text-xs text-gray-400">Page {page} ({(page-1)*50 + 5001} - {page*50 + 5000})</span>
+                         <button onClick={() => setPage(page + 1)} disabled={(page*50 + 5000) >= 10000} className="px-3 py-1 bg-slate-800 rounded text-xs disabled:opacity-50">Next</button>
                       </div>
                    </div>
 
-                   {/* Grid - Inspired by Bus Seat Plan */}
+                   {/* Grid - Logic Updated for Numbers */}
                    {loading ? (
                      <div className="text-center py-20 text-gray-500 animate-pulse">Loading Seat Plan...</div>
                    ) : (
                      <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-3">
                         {tickets.map((t) => (
                           <button
-                            key={t._id}
-                            onClick={() => toggleSelect(t)}
+                            key={t.ticketNumber} // Unique key হিসেবে এখন নাম্বার ব্যবহার হচ্ছে
+                            onClick={() => toggleSelect(t.ticketNumber, t.status)}
                             disabled={t.status === "sold"}
                             className={`
                               relative p-2 h-12 rounded-lg text-xs font-bold transition-all duration-200 border
                               ${t.status === "sold" 
                                 ? "bg-slate-800 text-slate-600 border-slate-800 cursor-not-allowed" 
-                                : selected.includes(t._id) 
+                                : selectedNumbers.includes(t.ticketNumber) 
                                   ? "bg-yellow-500 text-slate-900 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)] transform scale-110 z-10" 
                                   : "bg-slate-900 text-gray-400 border-slate-700 hover:border-yellow-500 hover:text-white"}
                             `}
@@ -285,11 +304,11 @@ export default function RaffleDrawPage() {
                    )}
 
                    {/* Sticky Footer for Manual Mode */}
-                   {selected.length > 0 && (
+                   {selectedNumbers.length > 0 && (
                       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-800/90 backdrop-blur border border-yellow-500 p-4 rounded-full shadow-2xl flex items-center gap-6 z-50 animate-in slide-in-from-bottom-5">
                          <div className="pl-4">
                             <span className="text-xs text-gray-400 uppercase block">Selected</span>
-                            <span className="text-xl font-bold text-white">{selected.length} Tickets</span>
+                            <span className="text-xl font-bold text-white">{selectedNumbers.length} Tickets</span>
                          </div>
                          <button 
                            onClick={() => handleBuy('manual')}
