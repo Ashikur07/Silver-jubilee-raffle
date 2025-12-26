@@ -121,63 +121,92 @@ const WinningTicketCard = ({ number, prize }) => {
     );
 };
 
-// --- Main Page ---
+
+// শুধু LiveDraw মেইন ফাংশনটা আপডেট করো:
+
 export default function LiveDraw() {
-  const [data, setData] = useState({ isSpinning: false, lastWinner: null, currentPrize: "", drawStartTime: null });
-  const [showWinner, setShowWinner] = useState(false);
-  const lastDrawTimeRef = useRef(null); // আগের ড্র টাইম মনে রাখার জন্য
-
-  // Polling Logic
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const res = await fetch("/api/draw/status");
-      const serverData = await res.json();
-      
-      // নতুন ড্র ডিটেক্ট করা (যদি drawStartTime চেঞ্জ হয়)
-      if (serverData.drawStartTime && serverData.drawStartTime !== lastDrawTimeRef.current) {
-          console.log("New Draw Triggered!");
-          lastDrawTimeRef.current = serverData.drawStartTime;
-          setData(serverData);
-          setShowWinner(false);
-
-          // ১৬.৫ সেকেন্ড পর উইনার কার্ড দেখানো (১৬ সে: স্পিন + ০.৫ সে: বাফার)
-          setTimeout(() => {
-             setShowWinner(true);
-          }, 16500);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e3a8a_0%,#020617_80%)]"></div>
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
-      {showWinner && <div className="absolute inset-0 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/confetti.png')] opacity-60 animate-pulse z-50"></div>}
-
-      <div className="z-10 flex flex-col items-center relative w-full scale-95 md:scale-100">
-        <div className={`transition-all duration-500 mb-6 text-center ${showWinner ? "opacity-0 translate-y-[-50px] hidden" : "opacity-100"}`}>
-            <h2 className="text-yellow-500 font-bold tracking-[0.4em] uppercase mb-2 animate-pulse text-xs md:text-sm">
-                {!showWinner && data.lastWinner ? "Spinning..." : "Ready to Draw"}
-            </h2>
-            <h1 className="text-3xl md:text-6xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                {data.currentPrize || "Grand Prize"}
-            </h1>
-        </div>
-
-        <div className="relative flex items-center justify-center h-[480px] md:h-[500px] w-full">
-            <div className={`transition-all duration-1000 transform ${showWinner ? "scale-0 opacity-0 blur-2xl" : "scale-100 opacity-100"}`}>
-                <FortuneWheel triggerSpin={data.drawStartTime} winningNumber={data.lastWinner} />
+    const [data, setData] = useState({ 
+        isSpinning: false, 
+        lastWinner: null, 
+        currentPrizeLabel: "", 
+        drawStartTime: null,
+        status: "IDLE" // IDLE, READY, RUNNING
+    });
+    const [showWinner, setShowWinner] = useState(false);
+    const lastDrawTimeRef = useRef(null);
+  
+    // Polling Logic
+    useEffect(() => {
+      const interval = setInterval(async () => {
+        const res = await fetch("/api/draw/control"); // এখন GET রিকোয়েস্ট করবে
+        const serverData = await res.json();
+        
+        // নতুন ড্র ডিটেক্ট করা
+        if (serverData.drawStartTime && serverData.drawStartTime !== lastDrawTimeRef.current) {
+            console.log("New Draw Triggered!");
+            lastDrawTimeRef.current = serverData.drawStartTime;
+            
+            setData(serverData); // স্টেট আপডেট (Spinning true হবে)
+            setShowWinner(false);
+  
+            // ১৬.৫ সেকেন্ড পর উইনার কার্ড
+            setTimeout(() => {
+               setShowWinner(true);
+            }, 16500);
+        } else {
+            // যদি ড্র না চলে, শুধু স্ট্যাটাস আপডেট করো (যেমন READY বা IDLE দেখার জন্য)
+            if (!serverData.isSpinning) {
+               setData(prev => ({ ...prev, status: serverData.status }));
+            }
+        }
+      }, 1000);
+      return () => clearInterval(interval);
+    }, []);
+  
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e3a8a_0%,#020617_80%)]"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+        {showWinner && <div className="absolute inset-0 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/confetti.png')] opacity-60 animate-pulse z-50"></div>}
+  
+        {/* --- SCENE 1: WAITING SCREEN (যখন Admin Setup দিয়েছে কিন্তু Start দেয়নি) --- */}
+        {data.status === "READY" && !data.isSpinning && !data.lastWinner && (
+           <div className="z-50 text-center animate-pulse">
+              <h1 className="text-6xl md:text-8xl font-black text-yellow-500 tracking-tighter drop-shadow-[0_0_25px_rgba(234,179,8,0.5)]">
+                  COMING SOON
+              </h1>
+              <p className="text-2xl text-white mt-4 font-bold tracking-[0.5em] uppercase">
+                  The Silver Jubilee Raffle Draw
+              </p>
+           </div>
+        )}
+  
+        {/* --- SCENE 2: MAIN DRAW (চাকা ঘুরছে বা উইনার দেখাচ্ছে) --- */}
+        {(data.isSpinning || data.lastWinner) && (
+            <div className="z-10 flex flex-col items-center relative w-full scale-95 md:scale-100">
+              <div className={`transition-all duration-500 mb-6 text-center ${showWinner ? "opacity-0 translate-y-[-50px] hidden" : "opacity-100"}`}>
+                  <h2 className="text-yellow-500 font-bold tracking-[0.4em] uppercase mb-2 animate-pulse text-xs md:text-sm">
+                      {!showWinner ? "Spinning..." : "Ready"}
+                  </h2>
+                  <h1 className="text-3xl md:text-6xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+                      {data.currentPrizeLabel || "Grand Prize"}
+                  </h1>
+              </div>
+  
+              <div className="relative flex items-center justify-center h-[480px] md:h-[500px] w-full">
+                  <div className={`transition-all duration-1000 transform ${showWinner ? "scale-0 opacity-0 blur-2xl" : "scale-100 opacity-100"}`}>
+                      <FortuneWheel triggerSpin={data.drawStartTime} winningNumber={data.lastWinner} />
+                  </div>
+                  <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+                      {showWinner && data.lastWinner && (
+                          <div className="pointer-events-auto">
+                              <WinningTicketCard number={data.lastWinner} prize={data.currentPrizeLabel} />
+                          </div>
+                      )}
+                  </div>
+              </div>
             </div>
-            <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-                {showWinner && data.lastWinner && (
-                    <div className="pointer-events-auto">
-                        <WinningTicketCard number={data.lastWinner} prize={data.currentPrize} />
-                    </div>
-                )}
-            </div>
-        </div>
+        )}
       </div>
-    </div>
-  );
-}
+    );
+  }
