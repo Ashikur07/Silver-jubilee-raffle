@@ -1,16 +1,14 @@
 import mongoose from "mongoose";
 
 const DrawStateSchema = new mongoose.Schema({
-  isSpinning: { type: Boolean, default: false },
-  drawStartTime: { type: Date }, // ট্রিগার টাইম
-  
-  // নতুন ফিল্ডস
-  totalPrizes: { type: Number, default: 0 }, // মোট ১০টা
-  currentPrizeRank: { type: Number, default: 0 }, // এখন ১০, তারপর ৯...
-  status: { type: String, default: "IDLE" }, // IDLE, READY, RUNNING, FINISHED
-  
-  lastWinner: { type: Number },
-  currentPrizeLabel: { type: String }, // "10th Prize", "Grand Prize" ইত্যাদি
-}, { timestamps: true });
+  isSpinning: { type: Boolean, default: false }, // চাকা ঘুরছে কি না
+  currentPrize: { type: String, default: "" },   // এখন কোন প্রাইজের ড্র হচ্ছে
+  lastWinner: { type: Number, default: null },   // শেষ কে জিতেছে
+  winnersHistory: [{                             // উইনারদের লিস্ট
+    prize: String,
+    ticketNumber: Number,
+    ownerEmail: String
+  }]
+});
 
 export default mongoose.models.DrawState || mongoose.model("DrawState", DrawStateSchema);
