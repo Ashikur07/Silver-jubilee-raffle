@@ -1,14 +1,19 @@
 import mongoose from "mongoose";
 
-const DrawStateSchema = new mongoose.Schema({
-  isSpinning: { type: Boolean, default: false }, // চাকা ঘুরছে কি না
-  currentPrize: { type: String, default: "" },   // এখন কোন প্রাইজের ড্র হচ্ছে
-  lastWinner: { type: Number, default: null },   // শেষ কে জিতেছে
-  winnersHistory: [{                             // উইনারদের লিস্ট
-    prize: String,
-    ticketNumber: Number,
-    ownerEmail: String
-  }]
-});
+const DrawStateSchema = new mongoose.Schema(
+  {
+    totalPrizes: { type: Number, default: 0 },
+    currentPrizeIndex: { type: Number, default: 0 },
+    isSpinning: { type: Boolean, default: false },
+    phase: {
+      type: String,
+      enum: ["idle", "ready", "spinning", "finished"],
+      default: "idle",
+    },
+    lastWinner: { type: Number, default: null },
+  },
+  { timestamps: true }
+);
 
-export default mongoose.models.DrawState || mongoose.model("DrawState", DrawStateSchema);
+export default mongoose.models.DrawState ||
+  mongoose.model("DrawState", DrawStateSchema);
