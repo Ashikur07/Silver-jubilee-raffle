@@ -1,84 +1,140 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { Trophy, Play, RotateCcw, ShieldCheck, AlertCircle } from "lucide-react";
 
-export default function AdminDashboard() {
-  const [prize, setPrize] = useState("1st Prize");
+export default function AdminPage() {
+  const [prize, setPrize] = useState("");
   const [isDrawing, setIsDrawing] = useState(false);
-  const [winner, setWinner] = useState(null);
+  const [lastWinnerInfo, setLastWinnerInfo] = useState(null);
 
-  const handleDrawControl = async (action) => {
-    if (action === "start") setIsDrawing(true);
+  // --- 1. Start Auto Draw Logic ---
+  const handleDrawControl = async () => {
+    if (!prize) return alert("⚠️ Please enter a prize name first!");
     
-    const res = await fetch("/api/draw/control", {
-      method: "POST",
-      body: JSON.stringify({ action, prize }),
-    });
-    
-    if (action === "stop") {
+    // কনফার্মেশন
+    if (!confirm(`Are you sure to START draw for: "${prize}"?`)) return;
+
+    setIsDrawing(true);
+    setLastWinnerInfo(null); // আগের ইনফো ক্লিয়ার
+
+    try {
+      const res = await fetch("/api/draw/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", prize }),
+      });
+
       const data = await res.json();
-      setWinner(data.winner);
-      setIsDrawing(false);
+
+      if (data.success) {
+        // এডমিন সাথে সাথেই উইনার দেখতে পাবে
+        setLastWinnerInfo(data.winner); 
+        alert(`✅ Draw Started Successfully!\n\nWinner Ticket: ${data.winner}`);
+      } else {
+        alert("❌ Error: " + data.message);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("❌ Failed to connect server.");
+    }
+
+    // বাটন ৩ সেকেন্ড পর আবার এনাবল হবে (যাতে ডাবল ক্লিক না পড়ে)
+    setTimeout(() => setIsDrawing(false), 3000);
+  };
+
+  // --- 2. Reset Screen Logic ---
+  const handleReset = async () => {
+    if (!confirm("⚠️ This will clear the public screen. Are you sure?")) return;
+    
+    try {
+      await fetch("/api/draw/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
+      alert("✅ Screen Reset Successfully.");
+      setLastWinnerInfo(null);
+      setPrize("");
+    } catch (error) {
+      alert("❌ Reset Failed.");
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-10">
-       <h1 className="text-3xl mb-8">Admin Control Panel</h1>
+    <div className="min-h-screen bg-slate-950 text-white p-6 flex items-center justify-center">
+      <div className="max-w-md w-full space-y-8">
+        
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <div className="inline-flex p-3 bg-slate-800 rounded-full border border-slate-700 shadow-lg">
+             <ShieldCheck className="w-8 h-8 text-yellow-500" />
+          </div>
+          <h1 className="text-2xl font-bold text-white">Raffle Admin Control</h1>
+          <p className="text-gray-400 text-sm">Manage the live draw from here</p>
+        </div>
 
-       <div className="grid grid-cols-2 gap-10">
-         {/* Draw Control */}
-         <div className="bg-slate-800 p-8 rounded-xl border border-slate-700">
-            <h2 className="text-2xl font-bold mb-6 text-yellow-500">Live Raffle Control</h2>
-            
-            <div className="mb-6">
-               <label className="block mb-2">Select Prize Category</label>
-               <select 
-                 className="w-full p-3 rounded bg-slate-900 border border-slate-600"
-                 onChange={(e) => setPrize(e.target.value)}
-               >
-                 <option>1st Prize (Laptop)</option>
-                 <option>2nd Prize (Smartphone)</option>
-                 <option>3rd Prize (Smart Watch)</option>
-                 <option>Special Prize</option>
-               </select>
-            </div>
+        {/* Control Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+           
+           {/* Input: Prize Name */}
+           <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-400 flex items-center gap-2">
+                 <Trophy size={16} className="text-yellow-500"/> Current Prize Name
+              </label>
+              <input 
+                type="text" 
+                value={prize}
+                onChange={(e) => setPrize(e.target.value)}
+                placeholder="e.g. 1st Prize - Laptop"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 outline-none transition"
+              />
+           </div>
 
-            <div className="flex gap-4">
-               <button 
-                 onClick={() => handleDrawControl("start")}
-                 disabled={isDrawing}
-                 className={`flex-1 py-4 font-bold rounded text-xl ${isDrawing ? 'bg-gray-600' : 'bg-green-600 hover:bg-green-500'}`}
-               >
-                 Start Spin
-               </button>
-               <button 
-                 onClick={() => handleDrawControl("stop")}
-                 disabled={!isDrawing}
-                 className={`flex-1 py-4 font-bold rounded text-xl ${!isDrawing ? 'bg-gray-600' : 'bg-red-600 hover:bg-red-500'}`}
-               >
-                 Stop & Pick Winner
-               </button>
-            </div>
+           {/* Button: Start Draw */}
+           <button
+             onClick={handleDrawControl}
+             disabled={isDrawing || !prize}
+             className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 shadow-lg transition-all transform active:scale-95
+               ${isDrawing 
+                 ? "bg-slate-700 text-gray-500 cursor-not-allowed" 
+                 : "bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white shadow-green-500/20"
+               }
+             `}
+           >
+             {isDrawing ? (
+               "Processing..."
+             ) : (
+               <>
+                 <Play fill="currentColor" /> Start Auto Draw
+               </>
+             )}
+           </button>
 
-            {winner && (
-               <div className="mt-6 p-4 bg-yellow-500/20 border border-yellow-500 text-center rounded">
-                  Last Winner: <span className="text-2xl font-bold text-yellow-400">#{winner}</span>
-               </div>
-            )}
-            
-            <div className="mt-8 pt-8 border-t border-slate-700 text-center">
-               <a href="/draw" target="_blank" className="text-blue-400 underline text-lg">
-                  Open Big Screen Draw Page ➡
-               </a>
-            </div>
-         </div>
+           {/* Info Box (Only shows after start) */}
+           {lastWinnerInfo && (
+             <div className="bg-green-900/20 border border-green-500/30 p-4 rounded-xl flex items-start gap-3">
+                <AlertCircle className="text-green-500 shrink-0 mt-0.5" size={18} />
+                <div className="space-y-1">
+                   <p className="text-green-400 text-sm font-bold">Draw Running...</p>
+                   <p className="text-gray-300 text-xs">
+                     The system selected Ticket <span className="text-white font-mono font-bold">{lastWinnerInfo}</span>. 
+                     Animation is playing on the main screen.
+                   </p>
+                </div>
+             </div>
+           )}
 
-         {/* Offline Ticket Entry (Short version) */}
-         <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 opacity-50 pointer-events-none">
-            <h2 className="text-xl font-bold mb-4">Offline Entry (Coming Soon)</h2>
-            <p>Use the same grid system as User Dashboard but fetching `type=offline` tickets.</p>
-         </div>
-       </div>
+           <div className="border-t border-slate-800 pt-4">
+              <button
+                onClick={handleReset}
+                className="w-full py-3 rounded-lg border border-slate-700 text-gray-400 hover:bg-slate-800 hover:text-white transition flex items-center justify-center gap-2 text-sm"
+              >
+                <RotateCcw size={16} /> Reset Screen / Stop
+              </button>
+           </div>
+        </div>
+
+      </div>
     </div>
   );
 }
