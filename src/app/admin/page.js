@@ -1,16 +1,20 @@
+// admin/page.js
 "use client";
 import { useState, useEffect } from "react";
 import { ChevronDown, Play, RotateCcw } from "lucide-react";
 
 export default function AdminDashboard() {
   const [totalPrizes, setTotalPrizes] = useState("10");
-  const [isSpinning, setIsSpinning] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false); // Database status (only for display)
   const [lastWinner, setLastWinner] = useState(null);
   const [isSetupMode, setIsSetupMode] = useState(false);
   const [currentPrizeNumber, setCurrentPrizeNumber] = useState(0);
   const [isDrawComplete, setIsDrawComplete] = useState(false);
   const [winnersHistory, setWinnersHistory] = useState([]);
   const [feedbackMsg, setFeedbackMsg] = useState("");
+  
+  // New: Local drawing state to control button locking independent of DB
+  const [localIsDrawing, setLocalIsDrawing] = useState(false);
 
   // পোলিং: status চেক করো
   useEffect(() => {
@@ -20,7 +24,7 @@ export default function AdminDashboard() {
       
       setIsSetupMode(data.isSetupMode || false);
       setCurrentPrizeNumber(data.currentPrizeNumber || 0);
-      setIsSpinning(data.isSpinning || false);
+      setIsSpinning(data.isSpinning || false); // স্ট্যাটাস টেক্সট দেখানোর জন্য আপডেট হবে
       setLastWinner(data.lastWinner || null);
       setWinnersHistory(data.winnersHistory || []);
       setIsDrawComplete(data.currentPrizeNumber === 0 && data.isSetupMode);
@@ -67,6 +71,8 @@ export default function AdminDashboard() {
     }
 
     try {
+      // ১. বাটন লক করো (লোকালি)
+      setLocalIsDrawing(true);
       setFeedbackMsg("⏳ Drawing...");
       
       const res = await fetch("/api/draw/control", {
@@ -80,8 +86,8 @@ export default function AdminDashboard() {
         setLastWinner(data.winner);
         setFeedbackMsg(`✅ Winner #${data.winner} for ${data.currentPrize}`);
         
-        // Wait 7 seconds for wheel animation to complete
-        await new Promise(resolve => setTimeout(resolve, 7000));
+        // ২. হুইল অ্যানিমেশনের সাথে মিল রেখে ১২ সেকেন্ড অপেক্ষা করো
+        await new Promise(resolve => setTimeout(resolve, 12000));
         
         if (data.isDrawComplete) {
           setIsDrawComplete(true);
@@ -94,6 +100,9 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       setFeedbackMsg("❌ Error: " + err.message);
+    } finally {
+      // ৩. কাজ শেষে বাটন আনলক করো
+      setLocalIsDrawing(false);
     }
   };
 
@@ -114,6 +123,7 @@ export default function AdminDashboard() {
         setWinnersHistory([]);
         setTotalPrizes("10");
         setFeedbackMsg("✅ Reset complete. Ready for new session");
+        setLocalIsDrawing(false); // রিসেট করলে লকও খুলে দাও
       }
     } catch (err) {
       setFeedbackMsg("❌ Error: " + err.message);
@@ -179,22 +189,23 @@ export default function AdminDashboard() {
           ) : (
             /* START MODE */
             <div className="space-y-4 mb-8">
+              {/* এখানে disabled শর্তে localIsDrawing ব্যবহার করা হয়েছে */}
               <button 
                 onClick={handleStartDraw}
-                disabled={isSpinning || isDrawComplete}
+                disabled={localIsDrawing || isDrawComplete}
                 className={`w-full font-black text-xl py-4 rounded-lg transition transform hover:scale-105 uppercase tracking-wider ${
-                  isSpinning || isDrawComplete
+                  localIsDrawing || isDrawComplete
                     ? "bg-gray-600 cursor-not-allowed"
                     : "bg-green-600 hover:bg-green-500 text-white"
                 }`}
               >
                 <Play className="inline mr-2" size={24} />
-                {isSpinning ? "Drawing..." : `Start for ${currentPrizeNumber}th Prize`}
+                {localIsDrawing ? "Drawing..." : `Start for ${currentPrizeNumber}th Prize`}
               </button>
 
               <button 
                 onClick={handleReset}
-                disabled={isSpinning}
+                disabled={localIsDrawing} // ড্র চলার সময় রিসেটও বন্ধ থাকবে
                 className="w-full bg-red-600 hover:bg-red-500 text-white font-black text-lg py-3 rounded-lg transition transform hover:scale-105 uppercase tracking-wider disabled:opacity-50"
               >
                 <RotateCcw className="inline mr-2" size={20} />

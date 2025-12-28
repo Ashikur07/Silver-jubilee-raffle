@@ -1,0 +1,1352 @@
+// admin/page.js
+"use client";
+import { useState, useEffect } from "react";
+import { ChevronDown, Play, RotateCcw } from "lucide-react";
+
+export default function AdminDashboard() {
+  const [totalPrizes, setTotalPrizes] = useState("10");
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [lastWinner, setLastWinner] = useState(null);
+  const [isSetupMode, setIsSetupMode] = useState(false);
+  const [currentPrizeNumber, setCurrentPrizeNumber] = useState(0);
+  const [isDrawComplete, setIsDrawComplete] = useState(false);
+  const [winnersHistory, setWinnersHistory] = useState([]);
+  const [feedbackMsg, setFeedbackMsg] = useState("");
+
+  // পোলিং: status চেক করো
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const res = await fetch("/api/draw/status");
+      const data = await res.json();
+      
+      setIsSetupMode(data.isSetupMode || false);
+      setCurrentPrizeNumber(data.currentPrizeNumber || 0);
+      setIsSpinning(data.isSpinning || false);
+      setLastWinner(data.lastWinner || null);
+      setWinnersHistory(data.winnersHistory || []);
+      setIsDrawComplete(data.currentPrizeNumber === 0 && data.isSetupMode);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // === SET: কয়টা প্রাইজ সেট করবো ===
+  const handleSetPrizes = async () => {
+    if (!totalPrizes || totalPrizes < 1) {
+      setFeedbackMsg("❌ Please select valid number of prizes");
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/draw/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          action: "set", 
+          totalPrizes: parseInt(totalPrizes) 
+        }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        setFeedbackMsg(`✅ Setup done! Ready to draw for ${totalPrizes} prizes`);
+        setIsSetupMode(true);
+        setCurrentPrizeNumber(parseInt(totalPrizes));
+      } else {
+        setFeedbackMsg("❌ " + (data.error || "Setup failed"));
+      }
+    } catch (err) {
+      setFeedbackMsg("❌ Error: " + err.message);
+    }
+  };
+
+  // === START: কারেন্ট প্রাইজের ড্র এক্সিকিউট করো ===
+  const handleStartDraw = async () => {
+    if (!isSetupMode) {
+      setFeedbackMsg("❌ Setup not complete");
+      return;
+    }
+
+    try {
+      setFeedbackMsg("⏳ Drawing...");
+      
+      const res = await fetch("/api/draw/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setLastWinner(data.winner);
+        setFeedbackMsg(`✅ Winner #${data.winner} for ${data.currentPrize}`);
+        
+        // Wait 7 seconds for wheel animation to complete
+        await new Promise(resolve => setTimeout(resolve, 7000));
+        
+        if (data.isDrawComplete) {
+          setIsDrawComplete(true);
+          setFeedbackMsg("🎉 All draws complete!");
+        } else {
+          setFeedbackMsg("✅ Ready for next draw!");
+        }
+      } else {
+        setFeedbackMsg("❌ " + (data.error || "Draw failed"));
+      }
+    } catch (err) {
+      setFeedbackMsg("❌ Error: " + err.message);
+    }
+  };
+
+  // === RESET: সব কিছু রিসেট করো ===
+  const handleReset = async () => {
+    try {
+      const res = await fetch("/api/draw/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset" }),
+      });
+
+      if (res.ok) {
+        setIsSetupMode(false);
+        setCurrentPrizeNumber(0);
+        setLastWinner(null);
+        setIsDrawComplete(false);
+        setWinnersHistory([]);
+        setTotalPrizes("10");
+        setFeedbackMsg("✅ Reset complete. Ready for new session");
+      }
+    } catch (err) {
+      setFeedbackMsg("❌ Error: " + err.message);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white p-10">
+      <h1 className="text-4xl font-black mb-10 text-yellow-500">🎰 Admin Control Panel</h1>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        
+        {/* === LEFT: DRAW CONTROL === */}
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-2xl border-2 border-yellow-500/30">
+          <h2 className="text-3xl font-black mb-8 text-yellow-400">Multi-Prize Draw Setup</h2>
+
+          {/* STATUS DISPLAY */}
+          <div className="space-y-4 mb-8 p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+            {isSetupMode && (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Total Prizes:</span>
+                  <span className="text-2xl font-black text-yellow-400">{totalPrizes}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Current Prize #:</span>
+                  <span className="text-2xl font-black text-blue-400">{currentPrizeNumber}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-300">Status:</span>
+                  <span className={`text-lg font-bold ${isDrawComplete ? "text-green-400" : "text-orange-400"}`}>
+                    {isDrawComplete ? "✅ All Complete" : `🔄 Drawing ${currentPrizeNumber} prizes`}
+                  </span>
+                </div>
+              </>
+            )}
+            {!isSetupMode && (
+              <div className="text-gray-400 text-center italic">Setup not started yet</div>
+            )}
+          </div>
+
+          {/* SET MODE */}
+          {!isSetupMode ? (
+            <div className="space-y-4 mb-8">
+              <label className="block text-sm font-bold text-gray-300 uppercase">Select Number of Prizes</label>
+              <select 
+                value={totalPrizes}
+                onChange={(e) => setTotalPrizes(e.target.value)}
+                className="w-full p-4 rounded-lg bg-slate-900 border-2 border-slate-700 text-white font-bold text-xl focus:border-yellow-500 outline-none"
+              >
+                {[1, 3, 5, 10, 15, 20, 25].map(num => (
+                  <option key={num} value={num}>{num} Prizes</option>
+                ))}
+              </select>
+
+              <button 
+                onClick={handleSetPrizes}
+                className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-black text-xl py-4 rounded-lg transition transform hover:scale-105 uppercase tracking-wider"
+              >
+                ⚙️ Set Prizes
+              </button>
+            </div>
+          ) : (
+            /* START MODE */
+            <div className="space-y-4 mb-8">
+              <button 
+                onClick={handleStartDraw}
+                disabled={isSpinning || isDrawComplete}
+                className={`w-full font-black text-xl py-4 rounded-lg transition transform hover:scale-105 uppercase tracking-wider ${
+                  isSpinning || isDrawComplete
+                    ? "bg-gray-600 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-500 text-white"
+                }`}
+              >
+                <Play className="inline mr-2" size={24} />
+                {isSpinning ? "Drawing..." : `Start for ${currentPrizeNumber}th Prize`}
+              </button>
+
+              <button 
+                onClick={handleReset}
+                disabled={isSpinning}
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-black text-lg py-3 rounded-lg transition transform hover:scale-105 uppercase tracking-wider disabled:opacity-50"
+              >
+                <RotateCcw className="inline mr-2" size={20} />
+                Reset Session
+              </button>
+            </div>
+          )}
+
+          {/* FEEDBACK MESSAGE */}
+          {feedbackMsg && (
+            <div className={`p-4 rounded-lg text-center font-bold text-lg ${
+              feedbackMsg.includes("❌") ? "bg-red-900/30 border border-red-500 text-red-200" :
+              feedbackMsg.includes("✅") ? "bg-green-900/30 border border-green-500 text-green-200" :
+              "bg-blue-900/30 border border-blue-500 text-blue-200"
+            }`}>
+              {feedbackMsg}
+            </div>
+          )}
+
+          {lastWinner && !isDrawComplete && (
+            <div className="mt-6 p-4 bg-yellow-500/20 border-2 border-yellow-400 rounded-lg text-center">
+              <p className="text-gray-300 text-sm mb-1">Last Winner</p>
+              <p className="text-4xl font-black text-yellow-300">#{lastWinner}</p>
+            </div>
+          )}
+
+          <div className="mt-10 pt-6 border-t border-slate-700 text-center">
+            <a 
+              href="/draw" 
+              target="_blank" 
+              className="inline-block bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition"
+            >
+              📺 Open Big Screen Draw Page →
+            </a>
+          </div>
+        </div>
+
+        {/* === RIGHT: WINNERS HISTORY === */}
+        <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-8 rounded-2xl border-2 border-slate-700">
+          <h2 className="text-2xl font-black mb-6 text-green-400">🏆 Winners History</h2>
+          
+          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            {winnersHistory && winnersHistory.length > 0 ? (
+              winnersHistory.map((w, idx) => (
+                <div 
+                  key={idx}
+                  className="bg-slate-900/50 p-4 rounded-lg border border-slate-600 flex justify-between items-center hover:border-yellow-500 transition"
+                >
+                  <div>
+                    <p className="text-yellow-400 font-black text-lg">#{w.ticketNumber}</p>
+                    <p className="text-gray-400 text-sm">{w.prize}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-green-400 font-bold">✓ Winner</p>
+                    <p className="text-gray-500 text-xs">#{w.prizeNumber || w.prize}</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-gray-500 text-center py-8 italic">No winners yet</p>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+
+
+
+// dashboard/page.js
+"use client";
+import { useSession } from "next-auth/react";
+import Link from "next/link";
+import { Ticket, GraduationCap, Calendar, User } from "lucide-react";
+
+export default function DashboardMenu() {
+  const { data: session } = useSession();
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white p-6 md:p-12">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        {/* Welcome Section */}
+        <div className="flex items-center justify-between border-b border-gray-700 pb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-yellow-500">
+              Welcome, {session?.user?.name?.split(" ")[0] || "Student"}!
+            </h1>
+            <p className="text-gray-400 mt-1">Student Portal • Dept of ICT</p>
+          </div>
+          <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center border border-slate-700">
+            {session?.user?.image ? (
+               <img src={session.user.image} className="w-full h-full rounded-full" />
+            ) : (
+               <User className="text-gray-400" />
+            )}
+          </div>
+        </div>
+
+        {/* Feature Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          
+          {/* Raffle Draw Card (Active Feature) */}
+          <Link href="/dashboard/raffle-draw" className="group">
+            <div className="bg-gradient-to-br from-blue-900 to-slate-800 p-8 rounded-2xl border border-blue-500/30 hover:border-yellow-500 transition-all transform hover:-translate-y-1 shadow-xl relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                  <Ticket size={100} />
+               </div>
+               <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center text-blue-400 mb-4 group-hover:text-yellow-400 transition">
+                  <Ticket size={24} />
+               </div>
+               <h3 className="text-xl font-bold text-white mb-2">Silver Jubilee Raffle</h3>
+               <p className="text-sm text-gray-400">Buy tickets, view status & win exclusive prizes.</p>
+               <span className="inline-block mt-4 text-xs font-bold text-yellow-500 uppercase tracking-wider group-hover:underline">
+                 Enter Now &rarr;
+               </span>
+            </div>
+          </Link>
+
+          {/* Dummy Feature 1 */}
+          <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 opacity-60 cursor-not-allowed">
+             <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-gray-400 mb-4">
+                <GraduationCap size={24} />
+             </div>
+             <h3 className="text-xl font-bold text-white mb-2">Convocation</h3>
+             <p className="text-sm text-gray-400">Registration closed.</p>
+          </div>
+
+          {/* Dummy Feature 2 */}
+          <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 opacity-60 cursor-not-allowed">
+             <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center text-gray-400 mb-4">
+                <Calendar size={24} />
+             </div>
+             <h3 className="text-xl font-bold text-white mb-2">Event Schedule</h3>
+             <p className="text-sm text-gray-400">Coming soon.</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// dashboard/raffle-draw/page.js
+"use client";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { ArrowLeft, Ticket, Users, CheckCircle, Zap, Grid } from "lucide-react";
+import Link from "next/link";
+
+// --- Components ---
+
+// 1. Premium Ticket Visual Component (ডিজাইন অপরিবর্তিত)
+const DemoTicket = ({ number, type = "large" }) => (
+  <div className={`relative ${type === "large" ? "w-full max-w-2xl h-64" : "w-64 h-32"} mx-auto transition-all duration-500`}>
+    <div className="absolute inset-0 bg-gradient-to-r from-yellow-600 via-yellow-300 to-yellow-600 rounded-xl shadow-2xl transform rotate-1"></div>
+    <div className="absolute inset-0 bg-slate-900 m-1 rounded-lg flex overflow-hidden border border-yellow-500/50">
+      {/* Left Stub */}
+      <div className={`${type === "large" ? "w-1/3 p-6" : "w-1/3 p-2"} bg-slate-800 border-r-2 border-dashed border-yellow-500/30 flex flex-col justify-between relative`}>
+        <div className={`absolute -top-3 -right-3 w-6 h-6 bg-slate-950 rounded-full z-10`}></div>
+        <div className={`absolute -bottom-3 -right-3 w-6 h-6 bg-slate-950 rounded-full z-10`}></div>
+        
+        <div className="text-yellow-500 font-bold uppercase text-[10px] tracking-widest">Silver Jubilee</div>
+        <div className="text-slate-400 text-[10px]">IU ICT Dept</div>
+      </div>
+      
+      {/* Right Content */}
+      <div className={`${type === "large" ? "w-2/3 p-6" : "w-2/3 p-2"} flex flex-col items-center justify-center relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]`}>
+        <div className={`text-center ${type === "large" ? "space-y-2" : ""}`}>
+           <span className={`block text-gray-400 uppercase tracking-widest ${type === "large" ? "text-sm" : "text-[8px]"}`}>
+             Ticket Number
+           </span>
+           <span className={`block font-mono font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-400 ${type === "large" ? "text-6xl" : "text-2xl"}`}>
+             {number || "XXXX"}
+           </span>
+           {type === "large" && <p className="text-yellow-500/80 text-xs mt-2">Win Laptop, Smartphone & More!</p>}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// --- Main Page ---
+
+export default function RaffleDrawPage() {
+  const { data: session } = useSession();
+  
+  // States
+  const [activeTab, setActiveTab] = useState("auto");
+  // লজিক আপডেট: টোটাল ৫০০০ ফিক্সড, নেক্সট এভেইলেবল ক্যালকুলেট হবে সোল্ডের ওপর ভিত্তি করে
+  const [stats, setStats] = useState({ total: 5000, sold: 0, nextAvailable: 5001 });
+  
+  // Manual Selection States
+  const [tickets, setTickets] = useState([]);
+  // লজিক আপডেট: এখন আমরা _id এর বদলে ticketNumber স্টোর করব
+  const [selectedNumbers, setSelectedNumbers] = useState([]); 
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+
+  // Auto Buy States
+  const [quantity, setQuantity] = useState(1);
+  const [previewRange, setPreviewRange] = useState("");
+
+  // ডাটা লোড করা
+  useEffect(() => {
+    fetchData();
+  }, [page, activeTab]); 
+
+  // প্রিভিউ রেঞ্জ ক্যালকুলেশন
+  useEffect(() => {
+    if (stats.nextAvailable) {
+      // ১০,০০০ এর বেশি যেন না যায়
+      const end = Math.min(10000, stats.nextAvailable + parseInt(quantity) - 1);
+      setPreviewRange(`${stats.nextAvailable} - ${end}`);
+    }
+  }, [quantity, stats.nextAvailable]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // ১. গ্রিডের ডাটা আনা (API এখন মিক্সড ডাটা দিবে)
+      const res = await fetch(`/api/tickets?page=${page}`);
+      const data = await res.json();
+      setTickets(data.tickets || []);
+      
+      // ২. স্ট্যাটাস আপডেট করা
+      setStats(prev => ({
+          ...prev,
+          sold: data.sold,
+          // Next Available Logic: 5001 + Sold Count (সিকোয়েন্সিয়াল লজিক)
+          nextAvailable: 5001 + data.sold 
+      }));
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+    }
+    setLoading(false);
+  };
+
+  // লজিক আপডেট: সিলেকশন এখন নাম্বারের ভিত্তিতে হবে
+  const toggleSelect = (ticketNumber, status) => {
+    if (status === "sold") return;
+    
+    if (selectedNumbers.includes(ticketNumber)) {
+      setSelectedNumbers(selectedNumbers.filter(n => n !== ticketNumber));
+    } else {
+      setSelectedNumbers([...selectedNumbers, ticketNumber]);
+    }
+  };
+
+  const handleBuy = async (mode) => {
+    let numbersToBuy = [];
+
+    if (mode === 'auto') {
+      // Auto Logic: nextAvailable থেকে শুরু করে quantity পর্যন্ত নাম্বার জেনারেট করা
+      const start = stats.nextAvailable;
+      for(let i=0; i<quantity; i++) {
+          if(start + i <= 10000) numbersToBuy.push(start + i);
+      }
+      
+      if(numbersToBuy.length === 0) return alert("No tickets available in this range!");
+
+      if(!confirm(`Buy ${numbersToBuy.length} tickets (${numbersToBuy[0]} - ${numbersToBuy[numbersToBuy.length-1]})?`)) return;
+    } 
+    
+    if (mode === 'manual') {
+      if(selectedNumbers.length === 0) return alert("Please select at least one ticket.");
+      numbersToBuy = selectedNumbers;
+      
+      if(!confirm(`Confirm purchase of ${selectedNumbers.length} tickets?`)) return;
+    }
+
+    // API Call (Logic Updated to send ticketNumbers)
+    try {
+      const res = await fetch("/api/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          ticketNumbers: numbersToBuy, 
+          email: session?.user?.email || "guest@user.com"
+        }),
+      });
+
+      const result = await res.json();
+
+      if (result.success) {
+        alert("🎉 Purchase Successful!");
+        setSelectedNumbers([]); // সিলেকশন ক্লিয়ার
+        fetchData(); // ডাটা রিফ্রেশ
+        // অটো মোডে থাকলে কোয়ান্টিটি রিসেট করতে পারো চাইলে
+        if(mode === 'auto') setQuantity(1);
+      } else {
+        alert("Failed: " + result.message);
+      }
+    } catch (error) {
+      alert("Something went wrong!");
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white pb-20">
+      
+      {/* 1. Header & Back Button */}
+      <div className="bg-slate-900/50 backdrop-blur border-b border-white/5 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+           <Link href="/dashboard" className="flex items-center gap-2 text-gray-400 hover:text-white transition">
+             <ArrowLeft size={18} /> <span className="text-sm font-medium">Back</span>
+           </Link>
+           <h1 className="text-lg font-bold text-yellow-500 uppercase tracking-widest">Raffle Draw 2025</h1>
+           <div className="w-6"></div> {/* Spacer */}
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto p-6 space-y-12">
+        
+        {/* 2. Hero Demo Ticket */}
+        <div className="text-center space-y-6 animate-in slide-in-from-top-10 duration-700">
+           <h2 className="text-3xl md:text-5xl font-bold text-white">Grab Your Lucky Chance!</h2>
+           <p className="text-blue-200">Exclusive tickets for the 25th Silver Jubilee Celebration.</p>
+           {/* ডেমো টিকেটে এখন প্রিভিউ বা ডিফল্ট কিছু দেখাবে */}
+           <DemoTicket number={activeTab === 'auto' ? (previewRange || "WIN") : "SELECT"} type="large" />
+        </div>
+
+        {/* 3. Stats Cards */}
+        <div className="grid grid-cols-3 gap-4 md:gap-8">
+           <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl text-center shadow-lg">
+              <Ticket className="w-8 h-8 text-blue-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-white">{stats.total}</div>
+              <div className="text-xs text-gray-400 uppercase">Total Tickets</div>
+           </div>
+           <div className="bg-slate-900 border border-yellow-500/30 p-6 rounded-2xl text-center shadow-lg relative overflow-hidden">
+              <div className="absolute inset-0 bg-yellow-500/5"></div>
+              <Users className="w-8 h-8 text-yellow-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-yellow-400">{stats.total - stats.sold}</div>
+              <div className="text-xs text-gray-400 uppercase">Remaining</div>
+           </div>
+           <div className="bg-slate-900 border border-slate-700 p-6 rounded-2xl text-center shadow-lg">
+              <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-white">{stats.sold}</div>
+              <div className="text-xs text-gray-400 uppercase">Sold Out</div>
+           </div>
+        </div>
+
+        {/* 4. Purchase Section (Tabs) */}
+        <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+           
+           {/* Tabs */}
+           <div className="flex border-b border-slate-800">
+              <button 
+                onClick={() => setActiveTab('auto')}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all
+                  ${activeTab === 'auto' ? 'bg-yellow-500 text-slate-900' : 'text-gray-400 hover:bg-slate-800'}
+                `}
+              >
+                <Zap size={16} /> Quick Auto Buy
+              </button>
+              <button 
+                onClick={() => setActiveTab('manual')}
+                className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all
+                  ${activeTab === 'manual' ? 'bg-yellow-500 text-slate-900' : 'text-gray-400 hover:bg-slate-800'}
+                `}
+              >
+                <Grid size={16} /> Choose Manually
+              </button>
+           </div>
+
+           {/* Tab Content */}
+           <div className="p-8">
+              
+              {/* --- AUTO BUY MODE --- */}
+              {activeTab === 'auto' && (
+                <div className="flex flex-col md:flex-row items-center gap-10 animate-in fade-in zoom-in duration-300">
+                   
+                   {/* Left: Input */}
+                   <div className="w-full md:w-1/2 space-y-6">
+                      <div>
+                        <label className="block text-sm text-gray-400 mb-2">How many tickets do you want?</label>
+                        <div className="flex items-center gap-4">
+                           <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="w-12 h-12 bg-slate-800 rounded-lg text-xl font-bold hover:bg-slate-700">-</button>
+                           <input 
+                             type="number" 
+                             value={quantity}
+                             onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                             className="w-full h-12 bg-slate-950 border border-slate-700 rounded-lg text-center text-xl font-bold focus:border-yellow-500 outline-none"
+                           />
+                           <button onClick={() => setQuantity(quantity + 1)} className="w-12 h-12 bg-slate-800 rounded-lg text-xl font-bold hover:bg-slate-700">+</button>
+                        </div>
+                      </div>
+                      <div className="bg-blue-900/20 p-4 rounded-xl border border-blue-500/20 text-sm text-blue-200">
+                          💡 System will automatically assign the next available numbers for you. Fast & Easy!
+                      </div>
+                      <button 
+                          onClick={() => handleBuy('auto')}
+                          className="w-full py-4 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-slate-900 font-bold rounded-xl shadow-lg transform hover:scale-[1.02] transition-all"
+                      >
+                          Buy Now
+                      </button>
+                   </div>
+
+                   {/* Right: Dynamic Preview */}
+                   <div className="w-full md:w-1/2 flex flex-col items-center justify-center">
+                      <p className="text-gray-400 text-xs uppercase tracking-widest mb-4">Your Ticket Preview</p>
+                      <DemoTicket number={previewRange || "..."} type="small" />
+                      <div className="mt-4 text-center">
+                         <p className="text-sm text-gray-400">You will receive numbers:</p>
+                         <p className="text-xl font-bold text-yellow-500">{previewRange}</p>
+                      </div>
+                   </div>
+                </div>
+              )}
+
+              {/* --- MANUAL MODE --- */}
+              {activeTab === 'manual' && (
+                <div className="animate-in fade-in zoom-in duration-300">
+                   <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-bold text-white">Select Your Numbers</h3>
+                      
+                      {/* Pagination: 50 Tickets Per Page */}
+                      <div className="flex items-center gap-2">
+                         <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page===1} className="px-3 py-1 bg-slate-800 rounded disabled:opacity-50 text-xs">Prev</button>
+                         <span className="text-xs text-gray-400">Page {page} ({(page-1)*50 + 5001} - {page*50 + 5000})</span>
+                         <button onClick={() => setPage(page + 1)} disabled={(page*50 + 5000) >= 10000} className="px-3 py-1 bg-slate-800 rounded text-xs disabled:opacity-50">Next</button>
+                      </div>
+                   </div>
+
+                   {/* Grid - Logic Updated for Numbers */}
+                   {loading ? (
+                     <div className="text-center py-20 text-gray-500 animate-pulse">Loading Seat Plan...</div>
+                   ) : (
+                     <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-3">
+                        {tickets.map((t) => (
+                          <button
+                            key={t.ticketNumber} // Unique key হিসেবে এখন নাম্বার ব্যবহার হচ্ছে
+                            onClick={() => toggleSelect(t.ticketNumber, t.status)}
+                            disabled={t.status === "sold"}
+                            className={`
+                              relative p-2 h-12 rounded-lg text-xs font-bold transition-all duration-200 border
+                              ${t.status === "sold" 
+                                ? "bg-slate-800 text-slate-600 border-slate-800 cursor-not-allowed" 
+                                : selectedNumbers.includes(t.ticketNumber) 
+                                  ? "bg-yellow-500 text-slate-900 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)] transform scale-110 z-10" 
+                                  : "bg-slate-900 text-gray-400 border-slate-700 hover:border-yellow-500 hover:text-white"}
+                            `}
+                          >
+                            {t.ticketNumber}
+                          </button>
+                        ))}
+                     </div>
+                   )}
+
+                   {/* Sticky Footer for Manual Mode */}
+                   {selectedNumbers.length > 0 && (
+                      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-800/90 backdrop-blur border border-yellow-500 p-4 rounded-full shadow-2xl flex items-center gap-6 z-50 animate-in slide-in-from-bottom-5">
+                         <div className="pl-4">
+                            <span className="text-xs text-gray-400 uppercase block">Selected</span>
+                            <span className="text-xl font-bold text-white">{selectedNumbers.length} Tickets</span>
+                         </div>
+                         <button 
+                           onClick={() => handleBuy('manual')}
+                           className="px-8 py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold rounded-full"
+                         >
+                           Confirm Buy
+                         </button>
+                      </div>
+                   )}
+                </div>
+              )}
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+// draw/page.js
+"use client";
+import { useState, useEffect } from "react";
+import { Sparkles, Trophy, Star, AlertCircle } from "lucide-react";
+
+// --- 1. Fortune Wheel Component ---
+const FortuneWheel = ({ isSpinning, winningNumber }) => {
+  const [rotation, setRotation] = useState(0);
+
+  const segments = [
+    { label: "0-1K", color: "#ef4444" },   // Red
+    { label: "1K-2K", color: "#f97316" },  // Orange
+    { label: "2K-3K", color: "#f59e0b" },  // Amber
+    { label: "3K-4K", color: "#eab308" },  // Yellow
+    { label: "4K-5K", color: "#84cc16" },  // Lime
+    { label: "5K-6K", color: "#10b981" },  // Emerald
+    { label: "6K-7K", color: "#06b6d4" },  // Cyan
+    { label: "7K-8K", color: "#3b82f6" },  // Blue
+    { label: "8K-9K", color: "#8b5cf6" },  // Violet
+    { label: "9K-10K", color: "#d946ef" }, // Fuchsia
+  ];
+
+  useEffect(() => {
+    if (isSpinning) {
+      // Continuous spin - increment rotation
+      const spinInterval = setInterval(() => {
+        setRotation(prev => prev + 15); // Smooth continuous rotation
+      }, 30);
+      return () => clearInterval(spinInterval);
+    } else if (winningNumber !== null) {
+      // Calculate landing position based on winning number
+      let index = Math.floor((winningNumber - 1) / 1000);
+      if (index < 0) index = 0;
+      if (index > 9) index = 9;
+
+      const segmentAngle = 36;
+      const targetRotation = 360 - (index * segmentAngle) - (segmentAngle / 2);
+      const totalRotation = 3600 + targetRotation;
+      
+      // Smooth transition to final position
+      setRotation(totalRotation);
+    }
+  }, [isSpinning, winningNumber]);
+
+  return (
+    <div className="relative flex flex-col items-center">
+      
+      {/* WINNER Header + Arrow */}
+      <div className="mb-[-20px] relative z-20 animate-bounce">
+        <div className="bg-red-600 border-4 border-red-800 text-white font-black text-xl px-8 py-2 rounded-xl shadow-[0_0_20px_rgba(239,68,68,0.8)] uppercase tracking-widest transform -skew-x-12">
+          WINNER
+        </div>
+        <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[30px] border-t-red-600 absolute left-1/2 transform -translate-x-1/2 -bottom-6 filter drop-shadow-xl"></div>
+      </div>
+
+      {/* The Wheel */}
+      <div className="relative flex items-center justify-center mt-6">
+        <div 
+          className="w-[340px] h-[340px] md:w-[420px] md:h-[420px] rounded-full border-[10px] md:border-[12px] border-yellow-500 shadow-[0_0_80px_rgba(234,179,8,0.4)] overflow-hidden relative"
+          style={{ 
+            transform: `rotate(${rotation}deg)`,
+            transitionDuration: isSpinning ? "0s" : "6s",
+            transitionTimingFunction: isSpinning 
+              ? "linear"
+              : "cubic-bezier(0.25, 0.1, 0.25, 1)",
+          }}
+        >
+          {/* Segments */}
+          {segments.map((seg, i) => (
+            <div 
+              key={i}
+              className="absolute top-0 left-0 w-full h-full origin-center"
+              style={{ transform: `rotate(${i * 36}deg)` }}
+            >
+              {/* Color Slice */}
+              <div 
+                className="absolute top-0 right-0 w-1/2 h-1/2 origin-bottom-left border-l border-white/20"
+                style={{
+                  transform: `rotate(0deg) skewY(-54deg)`,
+                  background: seg.color,
+                }}
+              ></div>
+              
+              {/* Text Label */}
+              <div 
+                className="absolute top-0 left-0 w-full h-1/2 flex justify-center origin-bottom"
+                style={{ transform: `rotate(18deg)` }}
+              >
+                <div 
+                  className="h-full flex items-start pt-8 md:pt-10"
+                  style={{ transformOrigin: "bottom center" }}
+                >
+                  <span 
+                    className="text-white font-black text-lg md:text-xl drop-shadow-md whitespace-nowrap"
+                    style={{ transform: `rotate(-90deg)` }}
+                  >
+                    {seg.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Center Hub */}
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-20 h-20 md:w-24 md:h-24 bg-white rounded-full flex items-center justify-center shadow-2xl border-[6px] border-gray-200 z-10">
+            <Star className="text-yellow-500 w-10 h-10 md:w-12 md:h-12 fill-yellow-500 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 2. Winning Card Component ---
+const WinningTicketCard = ({ number, prize }) => {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    setTimeout(() => setVisible(true), 100);
+  }, []);
+
+  return (
+    <div className={`relative z-50 transform transition-all duration-1000 ease-out 
+      ${visible ? "scale-100 rotate-0 opacity-100 translate-y-0" : "scale-0 rotate-[720deg] opacity-0 translate-y-96"}
+    `}>
+      <div className="absolute inset-0 bg-yellow-500 blur-3xl opacity-50 animate-pulse"></div>
+      <div className="w-[340px] md:w-[500px] h-auto bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 rounded-2xl border-4 border-yellow-400 p-2 shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] hover:translate-x-[100%] transition-transform duration-1000"></div>
+        <div className="bg-slate-900/50 backdrop-blur-md rounded-xl p-6 md:p-8 flex flex-col items-center justify-center border border-white/10">
+          <Trophy className="w-16 h-16 md:w-20 md:h-20 text-yellow-400 mb-4 md:mb-6 drop-shadow-[0_0_20px_rgba(250,204,21,0.6)]" />
+          <h3 className="text-gray-300 text-sm md:text-lg uppercase tracking-[0.4em] mb-2 font-bold">Winner For</h3>
+          <h2 className="text-2xl md:text-5xl text-white font-black mb-6 md:mb-8 text-center uppercase">{prize || "Prize"}</h2>
+          
+          <div className="bg-white/10 px-8 md:px-12 py-4 md:py-6 rounded-2xl border-2 border-yellow-500/50 relative shadow-inner">
+            <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[10px] md:text-sm font-black px-4 py-1 rounded-full uppercase tracking-wider shadow-lg">Lucky Ticket</span>
+            <span className="text-5xl md:text-8xl font-mono font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-yellow-600 drop-shadow-lg">
+              {number}
+            </span>
+          </div>
+          
+          <div className="mt-6 md:mt-8 flex items-center gap-3 text-yellow-500/80 text-[10px] md:text-sm font-semibold uppercase tracking-widest">
+            <Sparkles size={18} /> Silver Jubilee 2025 <Sparkles size={18} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 3. Setup Warning Message ---
+const SetupWarning = ({ totalPrizes, currentPrizeNumber }) => {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
+      <div className="pointer-events-auto bg-red-600/95 border-4 border-yellow-400 rounded-2xl p-6 md:p-8 text-center shadow-2xl animate-pulse max-w-md mx-4">
+        <AlertCircle className="w-12 h-12 md:w-16 md:h-16 text-yellow-300 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-2xl md:text-3xl font-black text-white uppercase mb-3 tracking-wider">
+          ⚠️ DRAW READY
+        </h3>
+        <p className="text-lg md:text-xl text-white font-bold mb-2">
+          Drawing {totalPrizes} Prizes
+        </p>
+        <p className="text-sm md:text-base text-yellow-100">
+          Starting from {currentPrizeNumber}th Prize
+        </p>
+        <p className="text-xs md:text-sm text-yellow-200 mt-3 italic">
+          Admin has initiated the draw setup
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// --- 4. Main Page ---
+export default function LiveDraw() {
+  const [status, setStatus] = useState({
+    isSpinning: false,
+    lastWinner: null,
+    currentPrize: "",
+    isSetupMode: false,
+    totalPrizes: 0,
+    currentPrizeNumber: 0,
+    winnersHistory: [],
+  });
+  const [showWinner, setShowWinner] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+
+  // === Polling for status updates ===
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/draw/status");
+        const data = await res.json();
+
+        // Show warning when setup is done
+        if (data.isSetupMode && !status.isSetupMode) {
+          setShowWarning(true);
+        }
+
+        // Hide warning when draw starts
+        if (data.isSpinning && showWarning) {
+          setTimeout(() => setShowWarning(false), 3000);
+        }
+
+        // Reset winner card when spin starts
+        if (data.isSpinning && !status.isSpinning) {
+          setShowWinner(false);
+        }
+
+        // Show winner card after spin ends (7 seconds to match admin timing)
+        if (!data.isSpinning && status.isSpinning && data.lastWinner) {
+          setTimeout(() => setShowWinner(true), 7000);
+        }
+
+        setStatus(data);
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [status.isSpinning, status.isSetupMode, showWarning]);
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
+      
+      {/* Background */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e3a8a_0%,#020617_80%)]"></div>
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+      
+      {/* Confetti on winner */}
+      {showWinner && (
+        <div className="absolute inset-0 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/confetti.png')] opacity-60 animate-pulse z-40"></div>
+      )}
+
+      {/* Setup Warning Message */}
+      {showWarning && status.isSetupMode && (
+        <SetupWarning 
+          totalPrizes={status.totalPrizes}
+          currentPrizeNumber={status.currentPrizeNumber}
+        />
+      )}
+
+      {/* Main Container */}
+      <div className="z-10 flex flex-col items-center relative w-full scale-95 md:scale-100">
+        
+        {/* Header Text */}
+        <div className={`transition-all duration-500 mb-6 text-center ${showWinner ? "opacity-0 translate-y-[-50px] hidden" : "opacity-100"}`}>
+          <h2 className="text-yellow-500 font-bold tracking-[0.4em] uppercase mb-2 animate-pulse text-xs md:text-sm">
+            {status.isSpinning ? "🎡 Spinning..." : status.isSetupMode ? "⏰ Ready to Draw" : "Ready to Draw"}
+          </h2>
+          <h1 className="text-3xl md:text-6xl font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+            {status.currentPrize || "Grand Prize"}
+          </h1>
+          {status.isSetupMode && (
+            <p className="text-yellow-300 text-sm md:text-lg mt-3 font-bold">
+              Drawing for {status.totalPrizes} Prizes
+            </p>
+          )}
+        </div>
+
+        {/* The Stage Area */}
+        <div className="relative flex items-center justify-center h-[480px] md:h-[500px] w-full">
+          
+          {/* The Wheel */}
+          <div className={`transition-all duration-1000 transform ${showWinner ? "scale-0 opacity-0 blur-2xl" : "scale-100 opacity-100"}`}>
+            <FortuneWheel isSpinning={status.isSpinning} winningNumber={status.lastWinner} />
+          </div>
+
+          {/* The Winner Card */}
+          <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+            {showWinner && status.lastWinner && (
+              <div className="pointer-events-auto">
+                <WinningTicketCard number={status.lastWinner} prize={status.currentPrize} />
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+// api/admin/offline-entry/route.js
+import dbConnect from "@/lib/db";
+import Ticket from "@/models/Ticket";
+import { NextResponse } from "next/server";
+
+export async function POST(req) {
+  try {
+    await dbConnect();
+    const { startRange, endRange } = await req.json(); // যেমন: 1001, 1050
+
+    if (startRange < 1000 || endRange > 5000) {
+      return NextResponse.json({ message: "Offline range must be between 1000 and 5000" }, { status: 400 });
+    }
+
+    const tickets = [];
+    for (let i = Number(startRange); i <= Number(endRange); i++) {
+      tickets.push({
+        ticketNumber: i,
+        type: "offline",
+        status: "sold",
+        userMail: null
+      });
+    }
+
+    // বাল্ক ইনসার্ট (একসাথে সব সেভ হবে, ডুপ্লিকেট হলে এরর ইগনোর করার জন্য option দেয়া যেতে পারে)
+    // সিম্পল রাখার জন্য insertMany দিচ্ছি, ডুপ্লিকেট থাকলে এরর দিবে
+    await Ticket.insertMany(tickets, { ordered: false }).catch(err => {
+        // ডুপ্লিকেট এরর ইগনোর করি, বাকিগুলো সেভ হোক
+    });
+
+    return NextResponse.json({ success: true, count: tickets.length });
+
+  } catch (error) {
+    return NextResponse.json({ message: "Error", error: error.message }, { status: 500 });
+  }
+}
+
+
+
+
+
+
+// api/auth/[...nextauth]/route.js
+import NextAuth from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
+
+const handler = NextAuth({
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    }),
+  ],
+  secret: process.env.NEXTAUTH_SECRET,
+  callbacks: {
+    async session({ session, token }) {
+      // সেশনে ইউজারের রোল বা আইডি পাঠানো যেতে পারে (ভবিষ্যতের জন্য)
+      session.user.id = token.sub;
+      return session;
+    },
+  },
+});
+
+export { handler as GET, handler as POST };
+
+
+
+// api/buy-ticket/route.js
+import dbConnect from "@/lib/db";
+import Ticket from "@/models/Ticket";
+import { NextResponse } from "next/server";
+
+export async function POST(req) {
+  try {
+    await dbConnect();
+    const { email } = await req.json();
+
+    if (!email) {
+      return NextResponse.json({ message: "Email is required" }, { status: 400 });
+    }
+
+    // ১. ডাটাবেসে চেক করি লাস্ট অনলাইন টিকেট কত বিক্রি হয়েছে
+    // আমরা ৫০০১ এর পর থেকে খুঁজব
+    const lastOnlineTicket = await Ticket.findOne({ 
+      type: "online",
+      ticketNumber: { $gte: 5001 } 
+    }).sort({ ticketNumber: -1 });
+
+    let newTicketNum = lastOnlineTicket ? lastOnlineTicket.ticketNumber + 1 : 5001;
+
+    // ২. যদি ১০,০০০ পার হয়ে যায়
+    if (newTicketNum > 10000) {
+      return NextResponse.json({ message: "All online tickets are sold out!" }, { status: 400 });
+    }
+
+    // ৩. টিকেট ক্রিয়েট করা
+    const newTicket = await Ticket.create({
+      ticketNumber: newTicketNum,
+      type: "online",
+      userMail: email,
+      status: "sold"
+    });
+
+    return NextResponse.json({ success: true, ticket: newTicket });
+
+  } catch (error) {
+    return NextResponse.json({ message: "Error", error: error.message }, { status: 500 });
+  }
+}
+
+
+
+
+// api/draw/route.js
+import dbConnect from "@/lib/db";
+import Ticket from "@/models/Ticket";
+import { NextResponse } from "next/server";
+
+export async function GET() { // ড্র করার জন্য GET রিকোয়েস্ট
+  await dbConnect();
+  
+  // এগ্রিগেশন ব্যবহার করে র‍্যান্ডম স্যাম্পল বের করা
+  const winner = await Ticket.aggregate([
+    { $match: { status: "sold" } }, // শুধু বিক্রি হওয়া টিকেট
+    { $sample: { size: 1 } } // যেকোনো ১টা তোলো
+  ]);
+
+  if (winner.length === 0) {
+    return NextResponse.json({ message: "No tickets sold yet!" });
+  }
+
+  return NextResponse.json(winner[0]);
+}
+
+
+
+// api/control/route.js
+import dbConnect from "@/lib/db";
+import DrawState from "@/models/DrawState";
+import Ticket from "@/models/Ticket";
+import { NextResponse } from "next/server";
+
+export async function POST(req) {
+  await dbConnect();
+  const { action, totalPrizes } = await req.json();
+
+  let state = await DrawState.findOne();
+  if (!state) state = await DrawState.create({});
+
+  // === SET MODE: Admin সেট করছে কয়টা প্রাইজ ===
+  if (action === "set") {
+    state.isSetupMode = true;
+    state.totalPrizes = totalPrizes;
+    state.currentPrizeNumber = totalPrizes; // উল্টা দিক থেকে শুরু (10, 9, 8...)
+    state.isSpinning = false;
+    state.lastWinner = null;
+    state.currentPrize = `${totalPrizes}th Prize`;
+    await state.save();
+    return NextResponse.json({ 
+      message: "Setup mode activated",
+      state: {
+        totalPrizes,
+        currentPrizeNumber: totalPrizes,
+        currentPrize: `${totalPrizes}th Prize`
+      }
+    });
+  }
+
+  // === START MODE: Admin এক্সিকিউট করছে কারেন্ট প্রাইজের ড্র ===
+  if (action === "start") {
+    if (!state.isSetupMode || state.totalPrizes === 0) {
+      return NextResponse.json({ error: "Setup not done yet!" }, { status: 400 });
+    }
+
+    // র‍্যান্ডম উইনার সিলেক্ট
+    const winnerTicket = await Ticket.aggregate([
+      { $match: { status: "sold" } },
+      { $sample: { size: 1 } }
+    ]);
+
+    if (winnerTicket.length > 0) {
+      state.isSpinning = true;
+      state.lastWinner = winnerTicket[0].ticketNumber;
+      
+      // History তে save করো
+      state.winnersHistory.push({
+        prize: state.currentPrize,
+        prizeNumber: state.currentPrizeNumber,
+        ticketNumber: winnerTicket[0].ticketNumber,
+        ownerEmail: winnerTicket[0].ownerEmail
+      });
+
+      // পরবর্তী প্রাইজ setup করো
+      state.currentPrizeNumber -= 1;
+      if (state.currentPrizeNumber > 0) {
+        state.currentPrize = `${state.currentPrizeNumber}th Prize`;
+      }
+
+      await state.save();
+      
+      return NextResponse.json({ 
+        winner: winnerTicket[0].ticketNumber,
+        email: winnerTicket[0].ownerEmail,
+        currentPrize: state.currentPrize,
+        isDrawComplete: state.currentPrizeNumber === 0
+      });
+    } else {
+      return NextResponse.json({ error: "No tickets available" }, { status: 400 });
+    }
+  }
+
+  // === RESET MODE: নতুন ড্র সেশন শুরু করার জন্য ===
+  if (action === "reset") {
+    state.isSetupMode = false;
+    state.totalPrizes = 0;
+    state.currentPrizeNumber = 0;
+    state.isSpinning = false;
+    state.lastWinner = null;
+    state.currentPrize = "";
+    state.winnersHistory = [];
+    await state.save();
+    return NextResponse.json({ message: "Reset complete" });
+  }
+}
+
+
+
+// api/status/route.js
+import dbConnect from "@/lib/db";
+import DrawState from "@/models/DrawState";
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  await dbConnect();
+  const state = await DrawState.findOne();
+  
+  if (!state) {
+    return NextResponse.json({
+      isSpinning: false,
+      lastWinner: null,
+      currentPrize: "",
+      isSetupMode: false,
+      totalPrizes: 0,
+      currentPrizeNumber: 0,
+      winnersHistory: []
+    });
+  }
+  
+  return NextResponse.json({
+    isSpinning: state.isSpinning,
+    lastWinner: state.lastWinner,
+    currentPrize: state.currentPrize,
+    isSetupMode: state.isSetupMode,
+    totalPrizes: state.totalPrizes,
+    currentPrizeNumber: state.currentPrizeNumber,
+    winnersHistory: state.winnersHistory
+  });
+}
+
+
+
+
+// api/seed/route.js
+import dbConnect from "@/lib/db";
+import Ticket from "@/models/Ticket";
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  await dbConnect();
+  
+  // চেক করি আগে ডাটা আছে কি না
+  const count = await Ticket.countDocuments();
+  if (count > 0) return NextResponse.json({ message: "Already seeded" });
+
+  const tickets = [];
+  
+  // ১০০০-৫০০০ (অফলাইন)
+  for (let i = 1000; i <= 5000; i++) {
+    tickets.push({ ticketNumber: i, type: "offline", status: "available" });
+  }
+  
+  // ৫০০১-১০০০০ (অনলাইন)
+  for (let i = 5001; i <= 10000; i++) {
+    tickets.push({ ticketNumber: i, type: "online", status: "available" });
+  }
+
+  await Ticket.insertMany(tickets);
+  return NextResponse.json({ message: "Tickets generated successfully!" });
+}
+
+
+
+// api/tickets/route.js
+import dbConnect from "@/lib/db";
+import Ticket from "@/models/Ticket";
+import { NextResponse } from "next/server";
+
+// GET: টিকেট লিস্ট এবং স্ট্যাটাস (Dynamic Grid Logic)
+export async function GET(req) {
+  await dbConnect();
+  const { searchParams } = new URL(req.url);
+  const page = parseInt(searchParams.get("page")) || 1;
+  const limit = 50; // প্রতি পেজে ৫০টা করে দেখাবে (তোমার রিকোয়ারমেন্ট অনুযায়ী)
+  
+  // রেঞ্জ ক্যালকুলেশন (5001 থেকে শুরু)
+  const startNum = 5001 + (page - 1) * limit;
+  const endNum = Math.min(startNum + limit - 1, 10000); // ১০,০০০ এর বেশি যাবে না
+
+  if (startNum > 10000) {
+    return NextResponse.json({ tickets: [], total: 5000, sold: 0 });
+  }
+
+  try {
+    // ১. শুধু এই রেঞ্জের মধ্যে বিক্রি হওয়া টিকেটগুলো খুঁজি
+    const soldTickets = await Ticket.find({
+      ticketNumber: { $gte: startNum, $lte: endNum },
+      status: "sold"
+    });
+
+    // ২. মিক্সড লিস্ট তৈরি (Sold + Available)
+    const mixedTickets = [];
+    for (let i = startNum; i <= endNum; i++) {
+      // চেক করি এই নাম্বারটা বিক্রি হয়েছে কি না
+      const isSold = soldTickets.find(t => t.ticketNumber === i);
+
+      if (isSold) {
+        mixedTickets.push(isSold); // বিক্রি হলে ডাটাবেসেরটা দাও
+      } else {
+        // বিক্রি না হলে ডামি Available অবজেক্ট বানাও
+        mixedTickets.push({
+          ticketNumber: i,
+          status: "available",
+          type: "online",
+          _id: `temp_${i}` // টেম্পোরারি আইডি
+        });
+      }
+    }
+
+    // ৩. টোটাল স্ট্যাটাস
+    const totalSold = await Ticket.countDocuments({ 
+      ticketNumber: { $gte: 5001, $lte: 10000 }, 
+      status: "sold" 
+    });
+
+    return NextResponse.json({
+      tickets: mixedTickets,
+      total: 5000, // ৫০০০ ফিক্সড (৫০০১-১০০০০)
+      sold: totalSold
+    });
+
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+// POST: টিকেট কেনা (Create Ticket on Buy)
+export async function POST(req) {
+  await dbConnect();
+  const { ticketNumbers, email } = await req.json(); // এখন ticketIds না, ticketNumbers নিব
+
+  try {
+    // ১. ডাবল চেক: কেউ কি এর মধ্যে কিনে ফেলেছে?
+    const existing = await Ticket.find({
+      ticketNumber: { $in: ticketNumbers },
+      status: "sold"
+    });
+
+    if (existing.length > 0) {
+      return NextResponse.json({ 
+        success: false, 
+        message: `Ticket ${existing.map(t=>t.ticketNumber).join(", ")} already sold!` 
+      }, { status: 400 });
+    }
+
+    // ২. নতুন টিকেট ডাটাবেসে সেভ করা
+    const newTickets = ticketNumbers.map(num => ({
+      ticketNumber: num,
+      type: "online",
+      status: "sold",
+      ownerEmail: email || "guest",
+      soldAt: new Date()
+    }));
+
+    await Ticket.insertMany(newTickets);
+
+    return NextResponse.json({ success: true });
+
+  } catch (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+}

@@ -1,33 +1,48 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Sparkles, Trophy, Star, AlertCircle } from "lucide-react";
+import { Star, AlertCircle } from "lucide-react";
+// আমরা এখান থেকে WinningCard ইম্পোর্ট করছি
+import WinningCard from "@/components/WinningCard"; 
 
-// --- 1. Fortune Wheel Component ---
+// --- 1. Fortune Wheel Component (স্পিনিং লজিক ঠিক আছে) ---
 const FortuneWheel = ({ isSpinning, winningNumber }) => {
   const [rotation, setRotation] = useState(0);
+  const [isLanding, setIsLanding] = useState(false);
 
   const segments = [
-    { label: "0-1K", color: "#ef4444" },   // Red
-    { label: "1K-2K", color: "#f97316" },  // Orange
-    { label: "2K-3K", color: "#f59e0b" },  // Amber
-    { label: "3K-4K", color: "#eab308" },  // Yellow
-    { label: "4K-5K", color: "#84cc16" },  // Lime
-    { label: "5K-6K", color: "#10b981" },  // Emerald
-    { label: "6K-7K", color: "#06b6d4" },  // Cyan
-    { label: "7K-8K", color: "#3b82f6" },  // Blue
-    { label: "8K-9K", color: "#8b5cf6" },  // Violet
-    { label: "9K-10K", color: "#d946ef" }, // Fuchsia
+    { label: "0-1K", color: "#ef4444" },
+    { label: "1K-2K", color: "#f97316" },
+    { label: "2K-3K", color: "#f59e0b" },
+    { label: "3K-4K", color: "#eab308" },
+    { label: "4K-5K", color: "#84cc16" },
+    { label: "5K-6K", color: "#10b981" },
+    { label: "6K-7K", color: "#06b6d4" },
+    { label: "7K-8K", color: "#3b82f6" },
+    { label: "8K-9K", color: "#8b5cf6" },
+    { label: "9K-10K", color: "#d946ef" },
   ];
 
   useEffect(() => {
+    // === ফিক্সড লজিক ===
     if (isSpinning) {
-      // Continuous spin - increment rotation
-      const spinInterval = setInterval(() => {
-        setRotation(prev => prev + 15); // Smooth continuous rotation
-      }, 30);
-      return () => clearInterval(spinInterval);
-    } else if (winningNumber !== null) {
-      // Calculate landing position based on winning number
+      if (!isLanding) {
+        const spinInterval = setInterval(() => {
+          setRotation(prev => prev + 15);
+        }, 30);
+
+        const timer = setTimeout(() => {
+          clearInterval(spinInterval);
+          setIsLanding(true);
+        }, 3000);
+
+        return () => {
+          clearInterval(spinInterval);
+          clearTimeout(timer);
+        };
+      }
+    } 
+    
+    if (isLanding && winningNumber !== null) {
       let index = Math.floor((winningNumber - 1) / 1000);
       if (index < 0) index = 0;
       if (index > 9) index = 9;
@@ -36,10 +51,14 @@ const FortuneWheel = ({ isSpinning, winningNumber }) => {
       const targetRotation = 360 - (index * segmentAngle) - (segmentAngle / 2);
       const totalRotation = 3600 + targetRotation;
       
-      // Smooth transition to final position
       setRotation(totalRotation);
     }
-  }, [isSpinning, winningNumber]);
+
+    if (!isSpinning && !winningNumber) {
+      setIsLanding(false);
+    }
+
+  }, [isSpinning, winningNumber, isLanding]);
 
   return (
     <div className="relative flex flex-col items-center">
@@ -58,10 +77,10 @@ const FortuneWheel = ({ isSpinning, winningNumber }) => {
           className="w-[340px] h-[340px] md:w-[420px] md:h-[420px] rounded-full border-[10px] md:border-[12px] border-yellow-500 shadow-[0_0_80px_rgba(234,179,8,0.4)] overflow-hidden relative"
           style={{ 
             transform: `rotate(${rotation}deg)`,
-            transitionDuration: isSpinning ? "0s" : "6s",
-            transitionTimingFunction: isSpinning 
-              ? "linear"
-              : "cubic-bezier(0.25, 0.1, 0.25, 1)",
+            transitionDuration: isLanding ? "6s" : "0s",
+            transitionTimingFunction: isLanding 
+              ? "cubic-bezier(0.25, 0.1, 0.25, 1)" 
+              : "linear",
           }}
         >
           {/* Segments */}
@@ -71,7 +90,6 @@ const FortuneWheel = ({ isSpinning, winningNumber }) => {
               className="absolute top-0 left-0 w-full h-full origin-center"
               style={{ transform: `rotate(${i * 36}deg)` }}
             >
-              {/* Color Slice */}
               <div 
                 className="absolute top-0 right-0 w-1/2 h-1/2 origin-bottom-left border-l border-white/20"
                 style={{
@@ -79,8 +97,6 @@ const FortuneWheel = ({ isSpinning, winningNumber }) => {
                   background: seg.color,
                 }}
               ></div>
-              
-              {/* Text Label */}
               <div 
                 className="absolute top-0 left-0 w-full h-1/2 flex justify-center origin-bottom"
                 style={{ transform: `rotate(18deg)` }}
@@ -110,42 +126,7 @@ const FortuneWheel = ({ isSpinning, winningNumber }) => {
   );
 };
 
-// --- 2. Winning Card Component ---
-const WinningTicketCard = ({ number, prize }) => {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    setTimeout(() => setVisible(true), 100);
-  }, []);
-
-  return (
-    <div className={`relative z-50 transform transition-all duration-1000 ease-out 
-      ${visible ? "scale-100 rotate-0 opacity-100 translate-y-0" : "scale-0 rotate-[720deg] opacity-0 translate-y-96"}
-    `}>
-      <div className="absolute inset-0 bg-yellow-500 blur-3xl opacity-50 animate-pulse"></div>
-      <div className="w-[340px] md:w-[500px] h-auto bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 rounded-2xl border-4 border-yellow-400 p-2 shadow-2xl relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent translate-x-[-100%] hover:translate-x-[100%] transition-transform duration-1000"></div>
-        <div className="bg-slate-900/50 backdrop-blur-md rounded-xl p-6 md:p-8 flex flex-col items-center justify-center border border-white/10">
-          <Trophy className="w-16 h-16 md:w-20 md:h-20 text-yellow-400 mb-4 md:mb-6 drop-shadow-[0_0_20px_rgba(250,204,21,0.6)]" />
-          <h3 className="text-gray-300 text-sm md:text-lg uppercase tracking-[0.4em] mb-2 font-bold">Winner For</h3>
-          <h2 className="text-2xl md:text-5xl text-white font-black mb-6 md:mb-8 text-center uppercase">{prize || "Prize"}</h2>
-          
-          <div className="bg-white/10 px-8 md:px-12 py-4 md:py-6 rounded-2xl border-2 border-yellow-500/50 relative shadow-inner">
-            <span className="absolute -top-4 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[10px] md:text-sm font-black px-4 py-1 rounded-full uppercase tracking-wider shadow-lg">Lucky Ticket</span>
-            <span className="text-5xl md:text-8xl font-mono font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-100 to-yellow-600 drop-shadow-lg">
-              {number}
-            </span>
-          </div>
-          
-          <div className="mt-6 md:mt-8 flex items-center gap-3 text-yellow-500/80 text-[10px] md:text-sm font-semibold uppercase tracking-widest">
-            <Sparkles size={18} /> Silver Jubilee 2025 <Sparkles size={18} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- 3. Setup Warning Message ---
+// --- 2. Setup Warning Message (অরিজিনাল) ---
 const SetupWarning = ({ totalPrizes, currentPrizeNumber }) => {
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
@@ -168,7 +149,7 @@ const SetupWarning = ({ totalPrizes, currentPrizeNumber }) => {
   );
 };
 
-// --- 4. Main Page ---
+// --- 3. Main Page ---
 export default function LiveDraw() {
   const [status, setStatus] = useState({
     isSpinning: false,
@@ -204,9 +185,15 @@ export default function LiveDraw() {
           setShowWinner(false);
         }
 
-        // Show winner card after spin ends (7 seconds to match admin timing)
-        if (!data.isSpinning && status.isSpinning && data.lastWinner) {
-          setTimeout(() => setShowWinner(true), 7000);
+        // === লজিক ফিক্স: কার্ড দেখানো এবং লুকানো ===
+        if (data.lastWinner && data.lastWinner !== status.lastWinner) {
+           setShowWinner(false);
+           setTimeout(() => setShowWinner(true), 9000);
+        }
+        
+        // যদি উইনার রিসেট হয়
+        if (!data.lastWinner && status.lastWinner) {
+           setShowWinner(false);
         }
 
         setStatus(data);
@@ -216,7 +203,7 @@ export default function LiveDraw() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [status.isSpinning, status.isSetupMode, showWarning]);
+  }, [status.isSpinning, status.isSetupMode, status.lastWinner, showWarning]);
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center relative overflow-hidden">
@@ -264,11 +251,11 @@ export default function LiveDraw() {
             <FortuneWheel isSpinning={status.isSpinning} winningNumber={status.lastWinner} />
           </div>
 
-          {/* The Winner Card */}
+          {/* The Winner Card - Alada Component Use Holo */}
           <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
             {showWinner && status.lastWinner && (
               <div className="pointer-events-auto">
-                <WinningTicketCard number={status.lastWinner} prize={status.currentPrize} />
+                <WinningCard number={status.lastWinner} prize={status.currentPrize} />
               </div>
             )}
           </div>
